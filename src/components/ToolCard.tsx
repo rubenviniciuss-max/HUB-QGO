@@ -1,28 +1,15 @@
-import { useState } from "react";
-import { ArrowUpRight, Loader2 } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { getToolIcon } from "@/lib/iconMap";
-import { abrirFerramenta } from "@/lib/ssoHandoff";
 import type { HubTool } from "@/lib/tools";
 
-export function ToolCard({ tool }: { tool: HubTool }) {
-  const [abrindo, setAbrindo] = useState(false);
+export function ToolCard({ tool, onAbrir }: { tool: HubTool; onAbrir: () => void }) {
   const Icon = getToolIcon(tool.icone);
-
-  async function handleAbrir() {
-    setAbrindo(true);
-    try {
-      await abrirFerramenta(tool);
-    } finally {
-      setAbrindo(false);
-    }
-  }
 
   return (
     <button
       type="button"
-      onClick={() => void handleAbrir()}
-      disabled={abrindo}
-      className="surface-card group flex flex-col items-start gap-4 p-6 text-left transition-all hover:-translate-y-0.5 hover:shadow-[var(--glow-gold)] disabled:pointer-events-none disabled:opacity-70"
+      onClick={onAbrir}
+      className="surface-card group flex flex-col items-start gap-4 p-6 text-left transition-all hover:-translate-y-0.5 hover:shadow-[var(--glow-gold)]"
     >
       <div
         className="flex size-12 items-center justify-center rounded-xl"
@@ -39,16 +26,8 @@ export function ToolCard({ tool }: { tool: HubTool }) {
         {tool.descricao && <p className="mt-1 text-sm text-muted-foreground">{tool.descricao}</p>}
       </div>
 
-      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-primary">
-        {abrindo ? (
-          <>
-            <Loader2 className="size-3.5 animate-spin" /> Abrindo…
-          </>
-        ) : tool.auto_login ? (
-          "Abrir com login automático"
-        ) : (
-          "Abrir"
-        )}
+      <span className="text-xs font-medium text-primary">
+        {tool.auto_login ? "Abrir com login automático" : "Abrir"}
       </span>
     </button>
   );
