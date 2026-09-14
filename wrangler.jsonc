@@ -8,7 +8,7 @@
   // um "commit" no GitHub apaga as variáveis/segredos adicionados manualmente
   // pelo painel da Cloudflare. Colocando aqui as que NÃO são segredo, elas
   // passam a valer sempre, em todo deploy, sem precisar readicionar na mão.
-  "name": "hub-qgo",
+  "name": "painel-qgo",
   "compatibility_date": "2026-09-03",
   "compatibility_flags": ["nodejs_compat"],
 
