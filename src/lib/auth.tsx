@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
@@ -66,8 +66,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAdminCarregando(false);
   }, []);
 
-  useEffect(() => {
+  // useLayoutEffect (não useEffect): aplica antes do navegador pintar a
+  // tela, pra nunca ter um piscar do tema errado.
+  useLayoutEffect(() => {
     aplicarTema(tema);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     let ativo = true;
 
     supabase.auth.getSession().then(({ data }) => {

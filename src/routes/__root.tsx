@@ -100,11 +100,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 // Aplica o tema salvo antes de qualquer coisa pintar na tela — inclusive na
 // tela de login — pra nunca piscar o tema errado. Padrão é claro.
-const SCRIPT_TEMA_INICIAL = `(function(){try{if(localStorage.getItem('qgo-hub-tema')==='dark'){var r=document.documentElement;r.classList.remove('light');r.classList.add('dark');}}catch(e){}})();`;
+const SCRIPT_TEMA_INICIAL = `(function(){try{var t=localStorage.getItem('qgo-hub-tema')==='dark'?'dark':'light';var r=document.documentElement;r.classList.remove('light','dark');r.classList.add(t);}catch(e){document.documentElement.classList.add('light');}})();`;
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="pt-BR" className="light" suppressHydrationWarning>
+    <html lang="pt-BR" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: SCRIPT_TEMA_INICIAL }} />
         <HeadContent />

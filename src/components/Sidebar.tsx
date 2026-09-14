@@ -7,6 +7,10 @@ import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import type { HubTool } from "@/lib/tools";
 
+// Preferência de cada pessoa (recolher o menu) fica salva no navegador dela —
+// assim continua do jeito que ela deixou mesmo depois de atualizar a página.
+const RECOLHIDA_STORAGE_KEY = "qgo-hub-menu-recolhido";
+
 export function Sidebar({
   ferramentas,
   ativa,
@@ -17,7 +21,26 @@ export function Sidebar({
   onSelect: (tool: HubTool | null) => void;
 }) {
   const { session, isAdmin, tema, alternarTema, sair } = useAuth();
-  const [recolhida, setRecolhida] = useState(false);
+  const [recolhida, setRecolhida] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem(RECOLHIDA_STORAGE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  function alternarRecolhida() {
+    setRecolhida((atual) => {
+      const proximo = !atual;
+      try {
+        window.localStorage.setItem(RECOLHIDA_STORAGE_KEY, proximo ? "1" : "0");
+      } catch {
+        // Navegação privada ou storage bloqueado — segue sem salvar.
+      }
+      return proximo;
+    });
+  }
 
   return (
     <aside
@@ -30,7 +53,7 @@ export function Sidebar({
         <Logo tamanho={30} comTexto={!recolhida} />
         <button
           type="button"
-          onClick={() => setRecolhida((v) => !v)}
+          onClick={alternarRecolhida}
           className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           title={recolhida ? "Expandir menu" : "Recolher menu"}
           aria-label={recolhida ? "Expandir menu" : "Recolher menu"}
