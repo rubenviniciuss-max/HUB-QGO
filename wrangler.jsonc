@@ -1,0 +1,34 @@
+{
+  // Este arquivo só declara "coisas extras" que o Worker precisa (as duas
+  // variáveis que não são segredo). O Nitro (ferramenta usada no build)
+  // continua gerando sozinho o restante da configuração — não mexer nisso
+  // aqui evita conflito com o que ele já gera automaticamente.
+  //
+  // Por que este arquivo existe: sem ele, cada novo deploy feito a partir de
+  // um "commit" no GitHub apaga as variáveis/segredos adicionados manualmente
+  // pelo painel da Cloudflare. Colocando aqui as que NÃO são segredo, elas
+  // passam a valer sempre, em todo deploy, sem precisar readicionar na mão.
+  "name": "hub-qgo",
+  "compatibility_date": "2026-09-03",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Mantém os registros (logs) do Worker sempre ativados no painel da
+  // Cloudflare, mesmo depois de um novo deploy.
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true,
+      "persist": true
+    }
+  },
+
+  // Variáveis que NÃO são segredo — mesmo projeto Supabase compartilhado
+  // pelas outras ferramentas da QGO (Painel Operacional, Portal QGO Prime,
+  // Gestão Financeira). A SUPABASE_SERVICE_ROLE_KEY (segredo de verdade)
+  // continua sendo cadastrada só pelo painel da Cloudflare, em Settings ->
+  // Runtime -> Variáveis e segredos — nunca aqui.
+  "vars": {
+    "SUPABASE_URL": "https://jjcvhlgqxcpulbjouvrd.supabase.co",
+    "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_CUBrfT5LposQoQBH69akDg_QUiX8SvF"
+  }
+}

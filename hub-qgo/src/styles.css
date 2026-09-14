@@ -1,0 +1,288 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Design system — Hub QGO (mesma identidade visual das outras ferramentas)
+ * Preto profundo + dourado. Inter em tudo (títulos, textos, botões, dados).
+ * Nunca use cores literais em componentes: use estes tokens semânticos.
+ */
+
+@theme inline {
+  --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-gold: var(--gold);
+  --color-gold-soft: var(--gold-soft);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+/* TEMA ESCURO (padrão) */
+:root,
+.dark {
+  --radius: 0.625rem;
+
+  --gold: oklch(0.749 0.108 88.2); /* #C9A84C */
+  --gold-soft: oklch(0.879 0.087 91.5); /* #F0D080 */
+
+  --background: oklch(0.145 0 0); /* #0A0A0A */
+  --foreground: oklch(1 0 0);
+  --card: oklch(0.205 0 0); /* #1A1A1A */
+  --card-foreground: oklch(1 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(1 0 0);
+
+  --primary: var(--gold);
+  --primary-foreground: oklch(0.145 0 0);
+  --secondary: oklch(0.26 0 0);
+  --secondary-foreground: oklch(0.98 0 0);
+  --muted: oklch(0.245 0 0);
+  --muted-foreground: oklch(0.79 0 0); /* prata #C0C0C0 */
+  --accent: oklch(0.28 0.02 90);
+  --accent-foreground: var(--gold-soft);
+
+  --destructive: oklch(0.6 0.21 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --success: oklch(0.63 0.16 150);
+  --success-foreground: oklch(0.145 0 0);
+  --warning: oklch(0.82 0.15 85);
+  --warning-foreground: oklch(0.145 0 0);
+  --info: oklch(0.62 0.15 250);
+  --info-foreground: oklch(0.98 0 0);
+
+  --border: oklch(0.749 0.108 88.2 / 18%);
+  --input: oklch(0.749 0.108 88.2 / 22%);
+  --ring: var(--gold);
+
+  --chart-1: var(--gold);
+  --chart-2: var(--gold-soft);
+  --chart-3: oklch(0.62 0.15 250);
+  --chart-4: oklch(0.63 0.16 150);
+  --chart-5: oklch(0.6 0.21 25);
+
+  --sidebar: oklch(0.175 0 0);
+  --sidebar-foreground: oklch(0.92 0 0);
+  --sidebar-primary: var(--gold);
+  --sidebar-primary-foreground: oklch(0.145 0 0);
+  --sidebar-accent: oklch(0.26 0.015 90);
+  --sidebar-accent-foreground: var(--gold-soft);
+  --sidebar-border: oklch(0.749 0.108 88.2 / 15%);
+  --sidebar-ring: var(--gold);
+
+  --gradient-gold: linear-gradient(135deg, #c9a84c, #f0d080, #c9a84c);
+  --shadow-elevated: 0 18px 45px -20px oklch(0 0 0 / 70%);
+  --shadow-gold: 0 10px 30px -12px oklch(0.749 0.108 88.2 / 45%);
+}
+
+/* TEMA CLARO */
+.light {
+  --background: oklch(0.965 0 0); /* #F5F5F5 */
+  --foreground: oklch(0.205 0 0); /* #1A1A1A */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.205 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.205 0 0);
+
+  --primary: oklch(0.64 0.1 85);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.94 0 0);
+  --secondary-foreground: oklch(0.28 0 0);
+  --muted: oklch(0.94 0 0);
+  --muted-foreground: oklch(0.48 0 0); /* #555555 */
+  --accent: oklch(0.96 0.03 90);
+  --accent-foreground: oklch(0.45 0.09 80);
+
+  --destructive: oklch(0.55 0.2 25);
+  --destructive-foreground: oklch(1 0 0);
+  --success: oklch(0.55 0.14 150);
+  --success-foreground: oklch(1 0 0);
+  --warning: oklch(0.72 0.14 80);
+  --warning-foreground: oklch(0.2 0 0);
+  --info: oklch(0.55 0.16 250);
+  --info-foreground: oklch(1 0 0);
+
+  --border: oklch(0.749 0.108 88.2 / 28%);
+  --input: oklch(0.749 0.108 88.2 / 32%);
+  --ring: oklch(0.64 0.1 85);
+
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.24 0 0);
+  --sidebar-primary: oklch(0.64 0.1 85);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.96 0.03 90);
+  --sidebar-accent-foreground: oklch(0.45 0.09 80);
+  --sidebar-border: oklch(0.749 0.108 88.2 / 25%);
+
+  --shadow-elevated: 0 12px 32px -18px oklch(0 0 0 / 22%);
+  --shadow-gold: 0 8px 24px -14px oklch(0.749 0.108 88.2 / 55%);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  .font-display {
+    font-family: var(--font-display);
+  }
+}
+
+@utility text-gold-gradient {
+  background: var(--gradient-gold);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility bg-gold-gradient {
+  background: var(--gradient-gold);
+}
+
+@utility shadow-elevated {
+  box-shadow: var(--shadow-elevated);
+}
+
+@utility shadow-gold {
+  box-shadow: var(--shadow-gold);
+}
+
+@utility surface-card {
+  background-color: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-elevated);
+}
+
+/* Hierarquia tipográfica — Inter em tudo */
+@utility page-title {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+  color: var(--color-foreground);
+}
+
+@utility section-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  line-height: 1.2;
+  color: var(--color-foreground);
+}
+
+@utility card-title {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--color-foreground);
+}
+
+@utility label-upper {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--color-foreground);
+}
+
+@utility body-text {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--color-foreground);
+}
+
+@utility secondary-text {
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
+  opacity: 0.65;
+}
+
+@media (min-width: 768px) {
+  .page-title {
+    font-size: 32px;
+  }
+  .section-title {
+    font-size: 24px;
+  }
+}
+
+.dark .page-title {
+  color: var(--color-primary);
+}
+
+/* Performance: transições curtas (máx. 150ms) e sem animações pesadas. */
+@layer base {
+  * {
+    transition-duration: min(var(--tw-duration, 150ms), 150ms);
+  }
+
+  img {
+    content-visibility: auto;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
