@@ -73,7 +73,7 @@ function Painel() {
   const listaAbertas = Object.values(abertas);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen flex-col overflow-hidden bg-background md:flex-row">
       <Sidebar ferramentas={ferramentas ?? []} ativa={ativa} onSelect={(tool) => (tool ? abrir(tool) : setAtivaId(null))} />
 
       <main className="relative flex flex-1 flex-col overflow-hidden">
@@ -112,30 +112,25 @@ function Painel() {
         {listaAbertas.map(({ tool, src }) => {
           const visivel = ativaId === tool.id;
           return (
-            <div key={tool.id} className={visivel ? "absolute inset-0 flex flex-col" : "hidden"}>
-              <div className="flex items-center justify-between gap-3 border-b border-border bg-card px-4 py-2.5 sm:px-6">
-                <h2 className="truncate text-sm font-medium text-foreground">{tool.nome}</h2>
-                {src && (
+            <div key={tool.id} className={visivel ? "absolute inset-0" : "hidden"}>
+              {!src ? (
+                <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" /> Carregando {tool.nome}…
+                </div>
+              ) : (
+                <>
+                  <iframe src={src} title={tool.nome} className="absolute inset-0 h-full w-full border-0" />
                   <a
                     href={src}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                    title="Abrir em nova aba"
+                    className="absolute right-3 top-3 flex items-center gap-1.5 rounded-md bg-card/90 px-2 py-1.5 text-xs font-medium text-muted-foreground opacity-70 shadow-sm backdrop-blur transition-opacity hover:opacity-100 hover:text-primary"
                   >
-                    Abrir em nova aba <ExternalLink className="size-3.5" />
+                    <ExternalLink className="size-3.5" />
                   </a>
-                )}
-              </div>
-
-              <div className="relative flex-1">
-                {!src ? (
-                  <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="size-4 animate-spin" /> Carregando {tool.nome}…
-                  </div>
-                ) : (
-                  <iframe src={src} title={tool.nome} className="absolute inset-0 h-full w-full border-0" />
-                )}
-              </div>
+                </>
+              )}
             </div>
           );
         })}

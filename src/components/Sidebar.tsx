@@ -11,15 +11,27 @@ import type { HubTool } from "@/lib/tools";
 // assim continua do jeito que ela deixou mesmo depois de atualizar a página.
 const RECOLHIDA_STORAGE_KEY = "qgo-hub-menu-recolhido";
 
-export function Sidebar({
-  ferramentas,
-  ativa,
-  onSelect,
-}: {
+type SidebarProps = {
   ferramentas: HubTool[];
   ativa: HubTool | null;
   onSelect: (tool: HubTool | null) => void;
-}) {
+};
+
+// No celular a barra lateral viraria uma faixa vertical enorme tomando
+// espaço de tela útil — por isso aqui ela vira uma faixa HORIZONTAL fixa no
+// topo (só ícones, rolável). No computador continua a barra lateral normal,
+// recolhível. As duas dividem a mesma lógica (useAuth, seleção de
+// ferramenta) — só a apresentação muda com o tamanho da tela.
+export function Sidebar(props: SidebarProps) {
+  return (
+    <>
+      <SidebarDesktop {...props} />
+      <TopBarMobile {...props} />
+    </>
+  );
+}
+
+function SidebarDesktop({ ferramentas, ativa, onSelect }: SidebarProps) {
   const { session, isAdmin, tema, alternarTema, sair } = useAuth();
   const [recolhida, setRecolhida] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -45,7 +57,7 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "flex h-screen shrink-0 flex-col border-r border-border bg-card transition-[width] duration-150",
+        "hidden h-screen shrink-0 flex-col border-r border-border bg-card transition-[width] duration-150 md:flex",
         recolhida ? "w-[64px]" : "w-64",
       )}
     >
@@ -154,5 +166,77 @@ export function Sidebar({
         </div>
       </div>
     </aside>
+  );
+}
+
+function TopBarMobile({ ferramentas, ativa, onSelect }: SidebarProps) {
+  const { isAdmin, tema, alternarTema, sair } = useAuth();
+
+  return (
+    <header className="flex h-14 w-full shrink-0 items-center gap-1 border-b border-border bg-card px-2 md:hidden">
+      <Logo tamanho={24} comTexto={false} />
+
+      <nav className="flex flex-1 items-center gap-1 overflow-x-auto px-1">
+        <button
+          type="button"
+          onClick={() => onSelect(null)}
+          title="Início"
+          className={cn(
+            "flex size-10 shrink-0 items-center justify-center rounded-md transition-colors",
+            !ativa ? "bg-primary/10 text-primary" : "text-foreground hover:bg-muted",
+          )}
+        >
+          <Home className="size-4.5" />
+        </button>
+
+        {ferramentas.map((t) => {
+          const Icon = getToolIcon(t.icone);
+          const isAtiva = ativa?.id === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => onSelect(t)}
+              title={t.nome}
+              className={cn(
+                "flex size-10 shrink-0 items-center justify-center rounded-md transition-colors",
+                isAtiva ? "bg-primary/10" : "hover:bg-muted",
+              )}
+            >
+              <Icon className="size-4.5" style={{ color: isAtiva ? undefined : t.cor }} />
+            </button>
+          );
+        })}
+
+        {isAdmin && (
+          <Link
+            to="/admin"
+            title="Gerenciar"
+            className="flex size-10 shrink-0 items-center justify-center rounded-md text-foreground transition-colors hover:bg-muted"
+          >
+            <Settings className="size-4.5" />
+          </Link>
+        )}
+      </nav>
+
+      <div className="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          onClick={alternarTema}
+          title={`Trocar para tema ${tema === "dark" ? "claro" : "escuro"}`}
+          className="flex size-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          {tema === "dark" ? <Sun className="size-4.5" /> : <Moon className="size-4.5" />}
+        </button>
+        <button
+          type="button"
+          onClick={() => void sair()}
+          title="Sair"
+          className="flex size-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <LogOut className="size-4.5" />
+        </button>
+      </div>
+    </header>
   );
 }

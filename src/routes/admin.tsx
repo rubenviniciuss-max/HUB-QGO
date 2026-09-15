@@ -103,7 +103,14 @@ function UsuariosTab() {
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
+  const [ferramentasNovoUsuario, setFerramentasNovoUsuario] = useState<string[]>([]);
   const [salvando, setSalvando] = useState(false);
+
+  function alternarFerramentaNovoUsuario(toolId: string, marcado: boolean) {
+    setFerramentasNovoUsuario((atual) =>
+      marcado ? [...atual, toolId] : atual.filter((id) => id !== toolId),
+    );
+  }
 
   async function handleCriar() {
     if (!nome.trim() || !email.trim() || senha.length < 6) {
@@ -112,12 +119,19 @@ function UsuariosTab() {
     }
     setSalvando(true);
     try {
-      await criarUsuarioFn({ data: { nome, email, senha } });
+      const { user_id } = await criarUsuarioFn({ data: { nome, email, senha } });
+      if (user_id && ferramentasNovoUsuario.length > 0) {
+        const { error } = await supabase
+          .from("hub_user_tool_access")
+          .insert(ferramentasNovoUsuario.map((tool_id) => ({ user_id, tool_id })));
+        if (error) toast.error(`Usuário criado, mas houve um erro ao liberar as ferramentas: ${error.message}`);
+      }
       toast.success("Usuário criado.");
       setNovoOpen(false);
       setNome("");
       setEmail("");
       setSenha("");
+      setFerramentasNovoUsuario([]);
       void qc.invalidateQueries({ queryKey: ["hub-admin-usuarios"] });
     } catch (e: any) {
       toast.error(e?.message || "Não foi possível criar o usuário.");
@@ -170,7 +184,15 @@ function UsuariosTab() {
       <div className="flex justify-end">
         <Dialog open={novoOpen} onOpenChange={setNovoOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-gold-gradient text-primary-foreground hover:opacity-90">
+            <Button
+              className="bg-gold-gradient text-primary-foreground hover:opacity-90"
+              onClick={() => {
+                setNome("");
+                setEmail("");
+                setSenha("");
+                setFerramentasNovoUsuario([]);
+              }}
+            >
               <Plus className="mr-1.5 size-4" /> Novo usuário
             </Button>
           </DialogTrigger>
@@ -197,6 +219,31 @@ function UsuariosTab() {
                 />
                 <p className="text-xs text-muted-foreground">
                   Combine essa senha com a pessoa por fora — ela pode trocar depois de entrar.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Ferramentas que essa pessoa vai poder abrir</Label>
+                {toolsAtivas.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Nenhuma ferramenta cadastrada ainda.</p>
+                ) : (
+                  <div className="space-y-1 rounded-md border border-border p-2">
+                    {toolsAtivas.map((t) => (
+                      <label
+                        key={t.id}
+                        className="flex cursor-pointer items-center justify-between rounded px-1.5 py-1 text-sm hover:bg-muted"
+                      >
+                        <span className="text-foreground">{t.nome}</span>
+                        <Switch
+                          checked={ferramentasNovoUsuario.includes(t.id)}
+                          onCheckedChange={(v) => alternarFerramentaNovoUsuario(t.id, v)}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Só o que você marcar aqui vai aparecer no menu dessa pessoa — o resto fica invisível pra ela. Dá
+                  pra mudar isso depois, na tabela abaixo.
                 </p>
               </div>
             </div>
