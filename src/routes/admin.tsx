@@ -23,7 +23,12 @@ import { getToolIcon } from "@/lib/iconMap";
 import { useTodasFerramentas, type HubTool } from "@/lib/tools";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
-import { adminCriarUsuario, adminExcluirUsuario, adminListUsuarios, type HubUsuario } from "@/lib/hub.functions";
+import {
+  adminBuscarUsuarioPorEmail,
+  adminCriarUsuario,
+  adminListUsuarios,
+  type HubUsuario,
+} from "@/lib/hub.functions";
 import { useServerFn } from "@tanstack/react-start";
 
 export const Route = createFileRoute("/admin")({
@@ -91,7 +96,7 @@ function UsuariosTab() {
   const qc = useQueryClient();
   const listUsuariosFn = useServerFn(adminListUsuarios);
   const criarUsuarioFn = useServerFn(adminCriarUsuario);
-  const excluirUsuarioFn = useServerFn(adminExcluirUsuario);
+  const buscarPorEmailFn = useServerFn(adminBuscarUsuarioPorEmail);
 
   const { data: ferramentas } = useTodasFerramentas();
   const usuariosQ = useQuery({
@@ -105,6 +110,11 @@ function UsuariosTab() {
   const [senha, setSenha] = useState("");
   const [ferramentasNovoUsuario, setFerramentasNovoUsuario] = useState<string[]>([]);
   const [salvando, setSalvando] = useState(false);
+  // "novo" -> ninguém com esse e-mail no ecossistema, vai criar conta.
+  // "existente" -> já tem conta em alguma ferramenta da QGO (ex.: Painel
+  // Operacional) — só libera o Hub pra ela, sem duplicar conta/senha.
+  const [statusEmail, setStatusEmail] = useState<"digitando" | "verificando" | "novo" | "existente">("digitando");
+  const [existenteId, setExistenteId] = useState<string | null>(null);
 
   function alternarFerramentaNovoUsuario(toolId: string, marcado: boolean) {
     setFerramentasNovoUsuario((atual) =>
@@ -112,9 +122,65 @@ function UsuariosTab() {
     );
   }
 
+  function resetarFormNovo() {
+    setNome("");
+    setEmail("");
+    setSenha("");
+    setFerramentasNovoUsuario([]);
+    setStatusEmail("digitando");
+    setExistenteId(null);
+  }
+
+  async function verificarEmail() {
+    const valor = email.trim();
+    if (!valor || !valor.includes("@")) return;
+    setStatusEmail("verificando");
+    try {
+      const resultado = await buscarPorEmailFn({ data: { email: valor } });
+      if (resultado.existe) {
+        setStatusEmail("existente");
+        setExistenteId(resultado.user_id);
+        if (resultado.nome) setNome(resultado.nome);
+      } else {
+        setStatusEmail("novo");
+        setExistenteId(null);
+      }
+    } catch (e: any) {
+      setStatusEmail("digitando");
+      toast.error(e?.message || "Não foi possível checar o e-mail.");
+    }
+  }
+
   async function handleCriar() {
-    if (!nome.trim() || !email.trim() || senha.length < 6) {
-      toast.error("Preencha nome, e-mail e uma senha com pelo menos 6 caracteres.");
+    if (!email.trim()) {
+      toast.error("Preencha o e-mail.");
+      return;
+    }
+    if (statusEmail === "existente" && existenteId) {
+      setSalvando(true);
+      try {
+        const { error: colabErr } = await supabase.from("hub_colaboradores").upsert({ user_id: existenteId });
+        if (colabErr) throw new Error(colabErr.message);
+        if (ferramentasNovoUsuario.length > 0) {
+          const { error } = await supabase
+            .from("hub_user_tool_access")
+            .upsert(ferramentasNovoUsuario.map((tool_id) => ({ user_id: existenteId, tool_id })));
+          if (error) throw new Error(error.message);
+        }
+        toast.success("Acesso ao Hub liberado — essa pessoa já tinha conta em outra ferramenta da QGO.");
+        setNovoOpen(false);
+        resetarFormNovo();
+        void qc.invalidateQueries({ queryKey: ["hub-admin-usuarios"] });
+      } catch (e: any) {
+        toast.error(e?.message || "Não foi possível liberar o acesso.");
+      } finally {
+        setSalvando(false);
+      }
+      return;
+    }
+
+    if (!nome.trim() || senha.length < 6) {
+      toast.error("Preencha nome e uma senha com pelo menos 6 caracteres.");
       return;
     }
     setSalvando(true);
@@ -128,10 +194,7 @@ function UsuariosTab() {
       }
       toast.success("Usuário criado.");
       setNovoOpen(false);
-      setNome("");
-      setEmail("");
-      setSenha("");
-      setFerramentasNovoUsuario([]);
+      resetarFormNovo();
       void qc.invalidateQueries({ queryKey: ["hub-admin-usuarios"] });
     } catch (e: any) {
       toast.error(e?.message || "Não foi possível criar o usuário.");
@@ -140,14 +203,21 @@ function UsuariosTab() {
     }
   }
 
-  async function handleExcluir(u: HubUsuario) {
-    if (!window.confirm(`Excluir "${u.email}"? Isso remove o login dela de TODO o ecossistema QGO.`)) return;
+  // Remove só o acesso ao HUB (tira de hub_colaboradores, hub_admins e
+  // hub_user_tool_access) — nunca mexe na conta de login em si, que continua
+  // valendo pra qualquer outra ferramenta da QGO que essa pessoa use.
+  async function handleRemoverDoHub(u: HubUsuario) {
+    if (!window.confirm(`Remover "${u.email}" do Hub? O login dela nas outras ferramentas da QGO não é afetado.`))
+      return;
     try {
-      await excluirUsuarioFn({ data: { user_id: u.user_id } });
-      toast.success("Usuário excluído.");
+      await supabase.from("hub_user_tool_access").delete().eq("user_id", u.user_id);
+      await supabase.from("hub_admins").delete().eq("user_id", u.user_id);
+      const { error } = await supabase.from("hub_colaboradores").delete().eq("user_id", u.user_id);
+      if (error) throw new Error(error.message);
+      toast.success("Removido do Hub.");
       void qc.invalidateQueries({ queryKey: ["hub-admin-usuarios"] });
     } catch (e: any) {
-      toast.error(e?.message || "Não foi possível excluir.");
+      toast.error(e?.message || "Não foi possível remover.");
     }
   }
 
@@ -186,12 +256,7 @@ function UsuariosTab() {
           <DialogTrigger asChild>
             <Button
               className="bg-gold-gradient text-primary-foreground hover:opacity-90"
-              onClick={() => {
-                setNome("");
-                setEmail("");
-                setSenha("");
-                setFerramentasNovoUsuario([]);
-              }}
+              onClick={resetarFormNovo}
             >
               <Plus className="mr-1.5 size-4" /> Novo usuário
             </Button>
@@ -202,25 +267,48 @@ function UsuariosTab() {
             </DialogHeader>
             <div className="space-y-3 py-2">
               <div className="space-y-1.5">
-                <Label>Nome</Label>
-                <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome completo" />
-              </div>
-              <div className="space-y-1.5">
                 <Label>E-mail</Label>
-                <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="pessoa@qgo.com.br" />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Senha provisória</Label>
                 <Input
-                  type="text"
-                  value={senha}
-                  onChange={(e) => setSenha(e.target.value)}
-                  placeholder="mínimo 6 caracteres"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (statusEmail !== "digitando") setStatusEmail("digitando");
+                  }}
+                  onBlur={() => void verificarEmail()}
+                  placeholder="pessoa@qgo.com.br"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Combine essa senha com a pessoa por fora — ela pode trocar depois de entrar.
-                </p>
+                {statusEmail === "verificando" && (
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Loader2 className="size-3 animate-spin" /> Checando se já existe conta com esse e-mail…
+                  </p>
+                )}
+                {statusEmail === "existente" && (
+                  <p className="text-xs text-primary">
+                    Já existe uma conta com esse e-mail em outra ferramenta da QGO — vamos só liberar o Hub pra ela,
+                    sem criar login novo.
+                  </p>
+                )}
               </div>
+              {statusEmail !== "existente" && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label>Nome</Label>
+                    <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome completo" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Senha provisória</Label>
+                    <Input
+                      type="text"
+                      value={senha}
+                      onChange={(e) => setSenha(e.target.value)}
+                      placeholder="mínimo 6 caracteres"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Combine essa senha com a pessoa por fora — ela pode trocar depois de entrar.
+                    </p>
+                  </div>
+                </>
+              )}
               <div className="space-y-1.5">
                 <Label>Ferramentas que essa pessoa vai poder abrir</Label>
                 {toolsAtivas.length === 0 ? (
@@ -248,9 +336,9 @@ function UsuariosTab() {
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={() => void handleCriar()} disabled={salvando}>
+              <Button onClick={() => void handleCriar()} disabled={salvando || statusEmail === "verificando"}>
                 {salvando && <Loader2 className="mr-1.5 size-4 animate-spin" />}
-                Criar usuário
+                {statusEmail === "existente" ? "Liberar acesso ao Hub" : "Criar usuário"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -300,7 +388,12 @@ function UsuariosTab() {
                     </TableCell>
                   ))}
                   <TableCell>
-                    <Button variant="ghost" size="icon" onClick={() => void handleExcluir(u)} title="Excluir">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => void handleRemoverDoHub(u)}
+                      title="Remover do Hub (não mexe no login dela nas outras ferramentas)"
+                    >
                       <Trash2 className="size-4 text-destructive" />
                     </Button>
                   </TableCell>

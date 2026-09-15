@@ -61,6 +61,12 @@ export interface Database {
         Update: { user_id?: string; tool_id?: string; created_at?: string };
         Relationships: [];
       };
+      hub_colaboradores: {
+        Row: { user_id: string; created_at: string };
+        Insert: { user_id: string; created_at?: string };
+        Update: { user_id?: string; created_at?: string };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {

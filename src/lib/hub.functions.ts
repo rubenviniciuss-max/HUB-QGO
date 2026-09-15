@@ -18,14 +18,23 @@ export type HubUsuario = {
   ferramentas: string[]; // ids das ferramentas com acesso
 };
 
-// Lista todo mundo que já tem conta no projeto Supabase compartilhado (a
-// mesma base de usuários das outras ferramentas da QGO), cruzando com quem é
-// admin do hub e quais ferramentas cada um pode abrir.
+// Lista só quem é COLABORADOR do Hub (tabela hub_colaboradores) — nunca a
+// base inteira de auth.users. O projeto Supabase é compartilhado com o
+// Portal QGO Prime, que tem uma conta de login pra cada CLIENTE da
+// contabilidade, então listar "todo mundo com login" misturaria cliente com
+// colaborador. O Hub é só pra gente de dentro da empresa.
 export const adminListUsuarios = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertAdmin(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: colaboradores, error: colabErr } = await supabaseAdmin
+      .from("hub_colaboradores")
+      .select("user_id");
+    if (colabErr) throw new Error(colabErr.message);
+    const idsColaboradores = new Set((colaboradores ?? []).map((c: any) => c.user_id));
+    if (idsColaboradores.size === 0) return [];
 
     const { data: userList, error: usersErr } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
     if (usersErr) throw new Error(usersErr.message);
@@ -45,16 +54,43 @@ export const adminListUsuarios = createServerFn({ method: "GET" })
       acessoMap.set(a.user_id, lista);
     }
 
-    const usuarios: HubUsuario[] = (userList?.users ?? []).map((u: any) => ({
-      user_id: u.id,
-      email: u.email ?? "",
-      nome: (u.user_metadata?.nome as string) || "",
-      criado_em: u.created_at,
-      is_admin: adminSet.has(u.id),
-      ferramentas: acessoMap.get(u.id) ?? [],
-    }));
+    const usuarios: HubUsuario[] = (userList?.users ?? [])
+      .filter((u: any) => idsColaboradores.has(u.id))
+      .map((u: any) => ({
+        user_id: u.id,
+        email: u.email ?? "",
+        nome: (u.user_metadata?.nome as string) || "",
+        criado_em: u.created_at,
+        is_admin: adminSet.has(u.id),
+        ferramentas: acessoMap.get(u.id) ?? [],
+      }));
     usuarios.sort((a, b) => a.email.localeCompare(b.email));
     return usuarios;
+  });
+
+// Confere se já existe uma conta (de QUALQUER ferramenta do ecossistema,
+// já que o login é compartilhado) com esse e-mail — sem devolver a lista
+// inteira de usuários pro navegador, só a resposta sim/não + o id. Usada
+// pela tela de "novo usuário" pra evitar duplicar conta de alguém que já
+// loga em outra ferramenta da QGO (ex.: já tem conta no Painel Operacional
+// e só precisa ser liberado no Hub também).
+export const adminBuscarUsuarioPorEmail = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { email: string }) => data)
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context);
+    const email = data.email.trim().toLowerCase();
+    if (!email) throw new Error("Informe um e-mail.");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: userList, error } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+    if (error) throw new Error(error.message);
+    const encontrado = (userList?.users ?? []).find((u: any) => (u.email ?? "").toLowerCase() === email);
+    if (!encontrado) return { existe: false as const };
+    return {
+      existe: true as const,
+      user_id: encontrado.id,
+      nome: (encontrado.user_metadata?.nome as string) || "",
+    };
   });
 
 // Cria um novo usuário da empresa (mesma base de auth das outras
@@ -78,6 +114,11 @@ export const adminCriarUsuario = createServerFn({ method: "POST" })
       user_metadata: { nome },
     });
     if (error) throw new Error(error.message);
+    if (created.user?.id) {
+      // Quem é criado pelo Hub é, por definição, colaborador — entra na
+      // lista de quem o Hub sabe gerenciar.
+      await supabaseAdmin.from("hub_colaboradores").upsert({ user_id: created.user.id });
+    }
     return { user_id: created.user?.id };
   });
 
