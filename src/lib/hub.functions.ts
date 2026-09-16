@@ -28,9 +28,9 @@ export type HubUsuario = {
 // promover a admin no Painel Operacional, trocar o tipo no Portal) — o Hub só
 // garante que a pessoa já consegue entrar.
 //
-// Ferramentas sem um "case" aqui (ex.: Gestão Financeira, por enquanto) só
-// recebem a permissão de abrir o link no Hub (hub_user_tool_access) — sem
-// provisionamento extra, até alguém mapear o esquema dela também.
+// Ferramentas sem um "case" aqui só recebem a permissão de abrir o link no
+// Hub (hub_user_tool_access) — sem provisionamento extra, até alguém mapear
+// o esquema dela também.
 // ---------------------------------------------------------------------------
 async function provisionarAcessoFerramenta(
   supabaseAdmin: any,
@@ -93,6 +93,37 @@ async function provisionarAcessoFerramenta(
         }
       } else {
         const { error } = await supabaseAdmin.from("profiles").update({ ativo: false }).eq("id", userId);
+        if (error) throw error;
+      }
+      return { ok: true };
+    }
+
+    if (slug === "gestao-financeira") {
+      // A Gestão Financeira NÃO tem conta isolada por pessoa — todo mundo
+      // com uma linha em user_roles enxerga os MESMOS clientes/cobranças
+      // (é uma tabela de acesso, não um espaço de dados por usuário). Então
+      // o provisionamento aqui não "cria uma conta nova": só garante que a
+      // pessoa vira staff da ferramenta única, pra entrar direto nos dados
+      // de sempre — em vez de logar e não enxergar nada (usuário sem
+      // nenhuma linha em user_roles não é staff, e some tudo pra ela).
+      if (conceder) {
+        const { data: existentes, error: buscaErro } = await supabaseAdmin
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", userId);
+        if (buscaErro) throw buscaErro;
+        // Se já tem algum papel (ex.: promovida a admin de dentro da própria
+        // Gestão Financeira), não mexe — só cria 'user' quando não tem nada.
+        if (!existentes || existentes.length === 0) {
+          const { error } = await supabaseAdmin
+            .from("user_roles")
+            .insert({ user_id: userId, role: "user" });
+          if (error) throw error;
+        }
+      } else {
+        // Não existe coluna "ativo" aqui — o acesso é tudo-ou-nada (existir
+        // linha = ser staff), então revogar pelo Hub remove o(s) papel(is).
+        const { error } = await supabaseAdmin.from("user_roles").delete().eq("user_id", userId);
         if (error) throw error;
       }
       return { ok: true };
