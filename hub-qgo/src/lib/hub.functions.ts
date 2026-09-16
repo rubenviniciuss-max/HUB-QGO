@@ -40,16 +40,33 @@ async function provisionarAcessoFerramenta(
   try {
     if (slug === "painel-operacional") {
       if (conceder) {
-        const { error } = await supabaseAdmin
+        const { error: roleErr } = await supabaseAdmin
           .from("painel_user_roles")
           .upsert({ user_id: userId, role: "member" }, { onConflict: "user_id,role" });
-        if (error) throw error;
-      } else {
-        const { error } = await supabaseAdmin
-          .from("painel_user_roles")
-          .delete()
+        if (roleErr) throw roleErr;
+        // O role sozinho não basta: o Painel só libera acesso de verdade (e
+        // decide as abas visíveis) pela linha em user_permissions. Se a
+        // pessoa já tinha uma (ex.: acesso desligado antes), só reativa sem
+        // apagar as abas que já estavam configuradas; se é a primeira vez,
+        // cria com abas vazias — quem decide o que ela vê é o próprio Painel
+        // Operacional, na tela de usuários.
+        const { data: existente, error: buscaErro } = await supabaseAdmin
+          .from("user_permissions")
+          .select("user_id")
           .eq("user_id", userId)
-          .eq("role", "member");
+          .maybeSingle();
+        if (buscaErro) throw buscaErro;
+        if (existente) {
+          const { error } = await supabaseAdmin.from("user_permissions").update({ ativo: true }).eq("user_id", userId);
+          if (error) throw error;
+        } else {
+          const { error } = await supabaseAdmin
+            .from("user_permissions")
+            .insert({ user_id: userId, nome, email, tabs: [], ativo: true });
+          if (error) throw error;
+        }
+      } else {
+        const { error } = await supabaseAdmin.from("user_permissions").update({ ativo: false }).eq("user_id", userId);
         if (error) throw error;
       }
       return { ok: true };
