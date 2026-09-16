@@ -26,7 +26,9 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   adminBuscarUsuarioPorEmail,
   adminCriarUsuario,
+  adminDefinirAcessoFerramenta,
   adminListUsuarios,
+  adminProvisionarFerramentas,
   type HubUsuario,
 } from "@/lib/hub.functions";
 import { useServerFn } from "@tanstack/react-start";
@@ -97,6 +99,8 @@ function UsuariosTab() {
   const listUsuariosFn = useServerFn(adminListUsuarios);
   const criarUsuarioFn = useServerFn(adminCriarUsuario);
   const buscarPorEmailFn = useServerFn(adminBuscarUsuarioPorEmail);
+  const provisionarFn = useServerFn(adminProvisionarFerramentas);
+  const definirAcessoFn = useServerFn(adminDefinirAcessoFerramenta);
 
   const { data: ferramentas } = useTodasFerramentas();
   const usuariosQ = useQuery({
@@ -161,13 +165,24 @@ function UsuariosTab() {
       try {
         const { error: colabErr } = await supabase.from("hub_colaboradores").upsert({ user_id: existenteId });
         if (colabErr) throw new Error(colabErr.message);
+        let avisos: string[] = [];
         if (ferramentasNovoUsuario.length > 0) {
           const { error } = await supabase
             .from("hub_user_tool_access")
             .upsert(ferramentasNovoUsuario.map((tool_id) => ({ user_id: existenteId, tool_id })));
           if (error) throw new Error(error.message);
+          // Junto do acesso ao Hub, já provisiona (cria/reativa) a permissão
+          // dela nas ferramentas marcadas.
+          const resultado = await provisionarFn({
+            data: { user_id: existenteId, nome: nome || "", email, tool_ids: ferramentasNovoUsuario },
+          });
+          avisos = resultado?.avisos ?? [];
         }
-        toast.success("Acesso ao Hub liberado — essa pessoa já tinha conta em outra ferramenta da QGO.");
+        if (avisos.length > 0) {
+          toast.warning(`Acesso ao Hub liberado, mas com pendências: ${avisos.join(" · ")}`);
+        } else {
+          toast.success("Acesso ao Hub liberado — essa pessoa já tinha conta em outra ferramenta da QGO.");
+        }
         setNovoOpen(false);
         resetarFormNovo();
         void qc.invalidateQueries({ queryKey: ["hub-admin-usuarios"] });
@@ -186,13 +201,28 @@ function UsuariosTab() {
     setSalvando(true);
     try {
       const { user_id } = await criarUsuarioFn({ data: { nome, email, senha } });
+      let avisos: string[] = [];
       if (user_id && ferramentasNovoUsuario.length > 0) {
         const { error } = await supabase
           .from("hub_user_tool_access")
           .insert(ferramentasNovoUsuario.map((tool_id) => ({ user_id, tool_id })));
-        if (error) toast.error(`Usuário criado, mas houve um erro ao liberar as ferramentas: ${error.message}`);
+        if (error) {
+          toast.error(`Usuário criado, mas houve um erro ao liberar as ferramentas: ${error.message}`);
+        } else {
+          // Já cria/reativa a permissão da pessoa em cada ferramenta marcada
+          // (ex.: linha em user_permissions no Painel, perfil no Portal) —
+          // dentro de cada ferramenta, o cargo/função exata se ajusta depois.
+          const resultado = await provisionarFn({
+            data: { user_id, nome, email, tool_ids: ferramentasNovoUsuario },
+          });
+          avisos = resultado?.avisos ?? [];
+        }
       }
-      toast.success("Usuário criado.");
+      if (avisos.length > 0) {
+        toast.warning(`Usuário criado, mas com pendências: ${avisos.join(" · ")}`);
+      } else {
+        toast.success("Usuário criado.");
+      }
       setNovoOpen(false);
       resetarFormNovo();
       void qc.invalidateQueries({ queryKey: ["hub-admin-usuarios"] });
@@ -221,15 +251,16 @@ function UsuariosTab() {
     }
   }
 
+  // Liga/desliga o acesso a uma ferramenta pra alguém que já está na tabela —
+  // a própria server function já provisiona (ou desativa) a permissão dela
+  // na ferramenta de destino, além de gravar hub_user_tool_access.
   async function toggleAcesso(u: HubUsuario, toolId: string, conceder: boolean) {
-    const { error } = conceder
-      ? await supabase.from("hub_user_tool_access").upsert({ user_id: u.user_id, tool_id: toolId })
-      : await supabase.from("hub_user_tool_access").delete().eq("user_id", u.user_id).eq("tool_id", toolId);
-    if (error) {
-      toast.error(error.message);
-      return;
+    try {
+      await definirAcessoFn({ data: { user_id: u.user_id, tool_id: toolId, conceder } });
+      void qc.invalidateQueries({ queryKey: ["hub-admin-usuarios"] });
+    } catch (e: any) {
+      toast.error(e?.message || "Não foi possível atualizar o acesso.");
     }
-    void qc.invalidateQueries({ queryKey: ["hub-admin-usuarios"] });
   }
 
   async function toggleAdmin(u: HubUsuario, tornarAdmin: boolean) {
@@ -330,8 +361,8 @@ function UsuariosTab() {
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  Só o que você marcar aqui vai aparecer no menu dessa pessoa — o resto fica invisível pra ela. Dá
-                  pra mudar isso depois, na tabela abaixo.
+                  Já libera o login nessas ferramentas; a função dela dentro de cada uma (admin, cargo etc.) você
+                  ajusta depois, na própria ferramenta.
                 </p>
               </div>
             </div>

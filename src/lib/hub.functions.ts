@@ -18,6 +18,106 @@ export type HubUsuario = {
   ferramentas: string[]; // ids das ferramentas com acesso
 };
 
+// ---------------------------------------------------------------------------
+// Provisionamento automático: quando o Hub concede (ou revoga) acesso a uma
+// ferramenta, isso cria (ou desativa) a linha de permissão dela mesma, direto
+// nas tabelas dessa ferramenta — todas vivem no mesmo projeto Supabase, então
+// dá pra escrever nelas com a service role sem precisar chamar a ferramenta
+// em si. Depois disso, quem administra CADA ferramenta continua ajustando a
+// função/cargo da pessoa por dentro dela (ex.: torná-la admin do Mural,
+// promover a admin no Painel Operacional, trocar o tipo no Portal) — o Hub só
+// garante que a pessoa já consegue entrar.
+//
+// Ferramentas sem um "case" aqui (ex.: Gestão Financeira, por enquanto) só
+// recebem a permissão de abrir o link no Hub (hub_user_tool_access) — sem
+// provisionamento extra, até alguém mapear o esquema dela também.
+// ---------------------------------------------------------------------------
+async function provisionarAcessoFerramenta(
+  supabaseAdmin: any,
+  params: { userId: string; slug: string; nome: string; email: string; conceder: boolean },
+): Promise<{ ok: true } | { ok: false; erro: string }> {
+  const { userId, slug, nome, email, conceder } = params;
+  try {
+    if (slug === "painel-operacional") {
+      if (conceder) {
+        const { error: roleErr } = await supabaseAdmin
+          .from("painel_user_roles")
+          .upsert({ user_id: userId, role: "member" }, { onConflict: "user_id,role" });
+        if (roleErr) throw roleErr;
+        // O role sozinho não basta: o Painel só libera acesso de verdade (e
+        // decide as abas visíveis) pela linha em user_permissions. Se a
+        // pessoa já tinha uma (ex.: acesso desligado antes), só reativa sem
+        // apagar as abas que já estavam configuradas; se é a primeira vez,
+        // cria com abas vazias — quem decide o que ela vê é o próprio Painel
+        // Operacional, na tela de usuários.
+        const { data: existente, error: buscaErro } = await supabaseAdmin
+          .from("user_permissions")
+          .select("user_id")
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (buscaErro) throw buscaErro;
+        if (existente) {
+          const { error } = await supabaseAdmin.from("user_permissions").update({ ativo: true }).eq("user_id", userId);
+          if (error) throw error;
+        } else {
+          const { error } = await supabaseAdmin
+            .from("user_permissions")
+            .insert({ user_id: userId, nome, email, tabs: [], ativo: true });
+          if (error) throw error;
+        }
+      } else {
+        const { error } = await supabaseAdmin.from("user_permissions").update({ ativo: false }).eq("user_id", userId);
+        if (error) throw error;
+      }
+      return { ok: true };
+    }
+
+    if (slug === "portal-qgo-prime") {
+      if (conceder) {
+        // Só define o "tipo" (função) na criação do perfil — se a pessoa já
+        // tinha perfil no Portal (ex.: admin, contador), reativa sem rebaixar.
+        const { data: existente, error: buscaErro } = await supabaseAdmin
+          .from("profiles")
+          .select("id")
+          .eq("id", userId)
+          .maybeSingle();
+        if (buscaErro) throw buscaErro;
+        if (existente) {
+          const { error } = await supabaseAdmin.from("profiles").update({ ativo: true }).eq("id", userId);
+          if (error) throw error;
+        } else {
+          const { error } = await supabaseAdmin
+            .from("profiles")
+            .insert({ id: userId, nome, email, tipo: "operacional", ativo: true });
+          if (error) throw error;
+        }
+      } else {
+        const { error } = await supabaseAdmin.from("profiles").update({ ativo: false }).eq("id", userId);
+        if (error) throw error;
+      }
+      return { ok: true };
+    }
+
+    if (slug === "mural-qgo") {
+      if (conceder) {
+        const { error } = await supabaseAdmin
+          .from("mural_usuarios")
+          .upsert({ id: userId, nome, ativo: true }, { onConflict: "id" });
+        if (error) throw error;
+      } else {
+        const { error } = await supabaseAdmin.from("mural_usuarios").update({ ativo: false }).eq("id", userId);
+        if (error) throw error;
+      }
+      return { ok: true };
+    }
+
+    // Ferramenta sem provisionamento mapeado ainda — só o acesso do Hub em si.
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, erro: e?.message || `Falha ao sincronizar acesso em "${slug}".` };
+  }
+}
+
 // Lista só quem é COLABORADOR do Hub (tabela hub_colaboradores) — nunca a
 // base inteira de auth.users. O projeto Supabase é compartilhado com o
 // Portal QGO Prime, que tem uma conta de login pra cada CLIENTE da
@@ -122,6 +222,87 @@ export const adminCriarUsuario = createServerFn({ method: "POST" })
     return { user_id: created.user?.id };
   });
 
+// Depois que o Hub já garantiu o acesso (conta criada ou já existente, e as
+// linhas de hub_user_tool_access já gravadas pela própria tela), isso faz o
+// provisionamento cruzado: cria/reativa a permissão da pessoa em cada
+// ferramenta marcada, sem duplicar a gravação de hub_user_tool_access (que
+// já foi feita direto pelo client, com a sessão do próprio admin).
+export const adminProvisionarFerramentas = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { user_id: string; nome: string; email: string; tool_ids: string[] }) => data)
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const avisos: string[] = [];
+    if (data.tool_ids.length > 0) {
+      const { data: tools, error: toolsErr } = await supabaseAdmin
+        .from("hub_tools")
+        .select("id, slug")
+        .in("id", data.tool_ids);
+      if (toolsErr) throw new Error(toolsErr.message);
+      for (const tool of tools ?? []) {
+        const resultado = await provisionarAcessoFerramenta(supabaseAdmin, {
+          userId: data.user_id,
+          slug: tool.slug,
+          nome: data.nome,
+          email: data.email,
+          conceder: true,
+        });
+        if (!resultado.ok) avisos.push(resultado.erro);
+      }
+    }
+    return { avisos };
+  });
+
+// Liga/desliga o acesso de um usuário existente a uma ferramenta — junto do
+// interruptor no Hub, já provisiona (ou desativa) a permissão dela mesma na
+// ferramenta de destino.
+export const adminDefinirAcessoFerramenta = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { user_id: string; tool_id: string; conceder: boolean }) => data)
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: tool, error: toolErr } = await supabaseAdmin
+      .from("hub_tools")
+      .select("slug")
+      .eq("id", data.tool_id)
+      .maybeSingle();
+    if (toolErr) throw new Error(toolErr.message);
+    if (!tool) throw new Error("Ferramenta não encontrada.");
+
+    const { data: userInfo, error: userErr } = await supabaseAdmin.auth.admin.getUserById(data.user_id);
+    if (userErr) throw new Error(userErr.message);
+    const nome = (userInfo.user?.user_metadata?.nome as string) || "";
+    const email = userInfo.user?.email || "";
+
+    if (data.conceder) {
+      const { error } = await supabaseAdmin
+        .from("hub_user_tool_access")
+        .upsert({ user_id: data.user_id, tool_id: data.tool_id });
+      if (error) throw new Error(error.message);
+    } else {
+      const { error } = await supabaseAdmin
+        .from("hub_user_tool_access")
+        .delete()
+        .eq("user_id", data.user_id)
+        .eq("tool_id", data.tool_id);
+      if (error) throw new Error(error.message);
+    }
+
+    const resultado = await provisionarAcessoFerramenta(supabaseAdmin, {
+      userId: data.user_id,
+      slug: tool.slug,
+      nome,
+      email,
+      conceder: data.conceder,
+    });
+    if (!resultado.ok) throw new Error(resultado.erro);
+
+    return { ok: true };
+  });
+
 // Remove o acesso de alguém ao Hub por completo (a conta continua existindo
 // nas outras ferramentas — isso só apaga a conta de autenticação se ela não
 // tiver sido criada por nenhuma outra ferramenta, mas como todas dividem a
@@ -138,8 +319,9 @@ export const adminExcluirUsuario = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// Ligar/desligar acesso a uma ferramenta e tornar/remover administrador não
-// precisam de server function: a política de segurança (RLS) das tabelas
-// hub_user_tool_access e hub_admins já libera escrita direta pra quem é
-// admin do hub, então a tela de administração chama o supabase client comum
-// (com a sessão do próprio admin) pra isso — ver src/routes/admin.tsx.
+// Tornar/remover administrador do Hub, e remover alguém só do Hub (sem
+// mexer no login dela nas outras ferramentas), não precisam de server
+// function: a política de segurança (RLS) das tabelas hub_user_tool_access,
+// hub_admins e hub_colaboradores já libera escrita direta pra quem é admin
+// do hub, então a tela de administração chama o supabase client comum (com
+// a sessão do próprio admin) pra isso — ver src/routes/admin.tsx.
