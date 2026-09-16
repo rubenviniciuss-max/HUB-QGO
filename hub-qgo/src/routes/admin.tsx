@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -23,7 +24,13 @@ import { getToolIcon } from "@/lib/iconMap";
 import { useTodasFerramentas, type HubTool } from "@/lib/tools";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
-import { adminCriarUsuario, adminExcluirUsuario, adminListUsuarios, type HubUsuario } from "@/lib/hub.functions";
+import {
+  adminCriarUsuario,
+  adminDefinirAcessoFerramenta,
+  adminExcluirUsuario,
+  adminListUsuarios,
+  type HubUsuario,
+} from "@/lib/hub.functions";
 import { useServerFn } from "@tanstack/react-start";
 
 export const Route = createFileRoute("/admin")({
@@ -92,6 +99,7 @@ function UsuariosTab() {
   const listUsuariosFn = useServerFn(adminListUsuarios);
   const criarUsuarioFn = useServerFn(adminCriarUsuario);
   const excluirUsuarioFn = useServerFn(adminExcluirUsuario);
+  const definirAcessoFn = useServerFn(adminDefinirAcessoFerramenta);
 
   const { data: ferramentas } = useTodasFerramentas();
   const usuariosQ = useQuery({
@@ -103,7 +111,17 @@ function UsuariosTab() {
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
+  const [toolsNovoUsuario, setToolsNovoUsuario] = useState<Set<string>>(new Set());
   const [salvando, setSalvando] = useState(false);
+
+  function alternarToolNovoUsuario(toolId: string, marcado: boolean) {
+    setToolsNovoUsuario((atual) => {
+      const proximo = new Set(atual);
+      if (marcado) proximo.add(toolId);
+      else proximo.delete(toolId);
+      return proximo;
+    });
+  }
 
   async function handleCriar() {
     if (!nome.trim() || !email.trim() || senha.length < 6) {
@@ -112,12 +130,21 @@ function UsuariosTab() {
     }
     setSalvando(true);
     try {
-      await criarUsuarioFn({ data: { nome, email, senha } });
-      toast.success("Usuário criado.");
+      const resultado = await criarUsuarioFn({
+        data: { nome, email, senha, toolIds: Array.from(toolsNovoUsuario) },
+      });
+      if (resultado?.avisos?.length) {
+        toast.warning(
+          `Usuário criado, mas com pendências: ${resultado.avisos.join(" · ")}`,
+        );
+      } else {
+        toast.success("Usuário criado e já liberado nas ferramentas marcadas.");
+      }
       setNovoOpen(false);
       setNome("");
       setEmail("");
       setSenha("");
+      setToolsNovoUsuario(new Set());
       void qc.invalidateQueries({ queryKey: ["hub-admin-usuarios"] });
     } catch (e: any) {
       toast.error(e?.message || "Não foi possível criar o usuário.");
@@ -138,14 +165,12 @@ function UsuariosTab() {
   }
 
   async function toggleAcesso(u: HubUsuario, toolId: string, conceder: boolean) {
-    const { error } = conceder
-      ? await supabase.from("hub_user_tool_access").upsert({ user_id: u.user_id, tool_id: toolId })
-      : await supabase.from("hub_user_tool_access").delete().eq("user_id", u.user_id).eq("tool_id", toolId);
-    if (error) {
-      toast.error(error.message);
-      return;
+    try {
+      await definirAcessoFn({ data: { user_id: u.user_id, tool_id: toolId, conceder } });
+      void qc.invalidateQueries({ queryKey: ["hub-admin-usuarios"] });
+    } catch (e: any) {
+      toast.error(e?.message || "Não foi possível atualizar o acesso.");
     }
-    void qc.invalidateQueries({ queryKey: ["hub-admin-usuarios"] });
   }
 
   async function toggleAdmin(u: HubUsuario, tornarAdmin: boolean) {
@@ -197,6 +222,27 @@ function UsuariosTab() {
                 />
                 <p className="text-xs text-muted-foreground">
                   Combine essa senha com a pessoa por fora — ela pode trocar depois de entrar.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Ferramentas com acesso</Label>
+                <div className="space-y-2 rounded-md border border-border p-3">
+                  {toolsAtivas.length === 0 && (
+                    <p className="text-xs text-muted-foreground">Nenhuma ferramenta ativa cadastrada ainda.</p>
+                  )}
+                  {toolsAtivas.map((t) => (
+                    <label key={t.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                      <Checkbox
+                        checked={toolsNovoUsuario.has(t.id)}
+                        onCheckedChange={(v) => alternarToolNovoUsuario(t.id, !!v)}
+                      />
+                      {t.nome}
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Já libera o login nessas ferramentas; a função dela dentro de cada uma (admin, cargo etc.) você
+                  ajusta depois, na própria ferramenta.
                 </p>
               </div>
             </div>
