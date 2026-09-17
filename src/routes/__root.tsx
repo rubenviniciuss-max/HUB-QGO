@@ -80,10 +80,22 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "theme-color", content: "#0A0A0A" },
+      // Necessários pro celular tratar isso como um "app instalado" quando a
+      // pessoa usa "Adicionar à Tela de Início" — é isso que faz o ícone
+      // dourado (manifest.webmanifest + apple-touch-icon) aparecer no lugar
+      // do favicon genérico, tanto no atalho da tela inicial quanto (quando
+      // o Hub tiver notificações no futuro) nas notificações do app.
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "apple-mobile-web-app-title", content: "Hub QGO" },
+      { name: "mobile-web-app-capable", content: "yes" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "icon", type: "image/png", href: "/favicon.png" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
