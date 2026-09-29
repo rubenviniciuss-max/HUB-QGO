@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
+import { z } from "zod";
 import { ExternalLink, Loader2, LayoutGrid } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { Sidebar } from "@/components/Sidebar";
@@ -9,8 +10,17 @@ import { useMinhasFerramentas } from "@/lib/tools";
 import { computarUrlComSessao } from "@/lib/ssoHandoff";
 import type { HubTool } from "@/lib/tools";
 
+// Guarda qual ferramenta está aberta como "?tool=<slug>" na URL -- sem isso,
+// atualizar a página (F5) sempre cai na tela inicial do Hub, porque o estado
+// de "qual ferramenta tá aberta" só existia em memória (useState), que se
+// perde a cada recarregamento.
+const searchSchema = z.object({
+  tool: z.string().optional(),
+});
+
 export const Route = createFileRoute("/")({
   ssr: false,
+  validateSearch: searchSchema,
   head: () => ({
     meta: [{ title: "Hub QGO" }],
   }),
@@ -49,14 +59,37 @@ function Index() {
 // volta pra ela depois.
 function Painel() {
   const { data: ferramentas, isLoading } = useMinhasFerramentas();
+  const navigate = useNavigate();
+  const { tool: toolSlugNaUrl } = useSearch({ from: "/" });
   const [ativaId, setAtivaId] = useState<string | null>(null);
   const [abertas, setAbertas] = useState<Record<string, { tool: HubTool; src: string | null }>>({});
   const calculando = useRef<Set<string>>(new Set());
+  const restaurouDaUrl = useRef(false);
 
-  function abrir(tool: HubTool) {
+  function abrir(tool: HubTool, opts?: { atualizarUrl?: boolean }) {
     setAtivaId(tool.id);
     setAbertas((atual) => (atual[tool.id] ? atual : { ...atual, [tool.id]: { tool, src: null } }));
+    if (opts?.atualizarUrl !== false) {
+      void navigate({ to: "/", search: { tool: tool.slug }, replace: true });
+    }
   }
+
+  function fechar() {
+    setAtivaId(null);
+    void navigate({ to: "/", search: {}, replace: true });
+  }
+
+  // Ao carregar (ou recarregar) a página já com "?tool=<slug>" na URL,
+  // reabre automaticamente a mesma ferramenta em vez de cair na tela inicial
+  // do Hub -- roda só uma vez, quando a lista de ferramentas liberadas
+  // termina de carregar.
+  useEffect(() => {
+    if (restaurouDaUrl.current) return;
+    if (!toolSlugNaUrl || !ferramentas) return;
+    restaurouDaUrl.current = true;
+    const alvo = ferramentas.find((t) => t.slug === toolSlugNaUrl);
+    if (alvo) abrir(alvo, { atualizarUrl: false });
+  }, [toolSlugNaUrl, ferramentas]);
 
   useEffect(() => {
     for (const [id, aberta] of Object.entries(abertas)) {
@@ -74,7 +107,7 @@ function Painel() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background md:flex-row">
-      <Sidebar ferramentas={ferramentas ?? []} ativa={ativa} onSelect={(tool) => (tool ? abrir(tool) : setAtivaId(null))} />
+      <Sidebar ferramentas={ferramentas ?? []} ativa={ativa} onSelect={(tool) => (tool ? abrir(tool) : fechar())} />
 
       <main className="relative flex flex-1 flex-col overflow-hidden">
         <div className={ativaId ? "hidden" : "flex-1 overflow-y-auto px-4 py-10 sm:px-8"}>
